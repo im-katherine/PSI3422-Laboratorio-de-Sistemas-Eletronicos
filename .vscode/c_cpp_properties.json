@@ -1,0 +1,86 @@
+//
+// !!! WARNING !!! AUTO-GENERATED FILE!
+// PLEASE DO NOT MODIFY IT AND USE "platformio.ini":
+// https://docs.platformio.org/page/projectconf/section_env_build.html#build-flags
+//
+{
+    "configurations": [
+        {
+            "name": "PlatformIO",
+            "includePath": [
+                "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/include",
+                "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/src",
+                "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/.pio/build/frdm_kl25z/zephyr/include/generated/zephyr",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/include",
+                "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/.pio/build/frdm_kl25z/zephyr/include/generated",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/soc/nxp/kinetis",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/lib/libc/newlib/include",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/soc/nxp/kinetis/kl2x",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/soc/nxp/kinetis/common",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/cmsis/CMSIS/Core/Include",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/cmsis_6/CMSIS/Core/Include",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/modules/cmsis_6",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk/devices/MKL25Z4",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk/devices/MKL25Z4/drivers",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk-ng/drivers/common",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk-ng/drivers/lpsci",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk-ng/drivers/port",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk-ng/drivers/tpm",
+                ""
+            ],
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true,
+                "path": [
+                    "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/include",
+                    "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/src",
+                    "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/.pio/build/frdm_kl25z/zephyr/include/generated/zephyr",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/include",
+                    "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/.pio/build/frdm_kl25z/zephyr/include/generated",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/soc/nxp/kinetis",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/lib/libc/newlib/include",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/soc/nxp/kinetis/kl2x",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/soc/nxp/kinetis/common",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/cmsis/CMSIS/Core/Include",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/cmsis_6/CMSIS/Core/Include",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/modules/cmsis_6",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk/devices/MKL25Z4",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk/devices/MKL25Z4/drivers",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk-ng/drivers/common",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk-ng/drivers/lpsci",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk-ng/drivers/port",
+                    "C:/Users/isisk/.platformio/packages/framework-zephyr/_pio/modules/hal/nxp/mcux/mcux-sdk-ng/drivers/tpm",
+                    ""
+                ]
+            },
+            "defines": [
+                "PLATFORMIO=60119",
+                "CPU_MKL25Z128VLK4",
+                "KERNEL",
+                "K_HEAP_MEM_POOL_SIZE=0",
+                "NDEBUG",
+                "_ANSI_SOURCE",
+                "__LINUX_ERRNO_EXTENSIONS__",
+                "__PROGRAM_START",
+                "__ZEPHYR__=1",
+                ""
+            ],
+            "cStandard": "c99",
+            "forcedInclude": [
+                "C:/Users/isisk/.platformio/PSI3422-Laboratorio-de-Sistemas-Eletronicos-main/.pio/build/frdm_kl25z/zephyr/include/generated/zephyr/autoconf.h",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/include/zephyr/toolchain/zephyr_stdint.h",
+                ""
+            ],
+            "compilerPath": "C:/Users/isisk/.platformio/packages/toolchain-gccarmnoneeabi@1.80201.181220/bin/arm-none-eabi-gcc.exe",
+            "compilerArgs": [
+                "-mcpu=cortex-m0plus",
+                "-mthumb",
+                "-mabi=aapcs",
+                "-mfp16-format=ieee",
+                "-isystem",
+                "C:/Users/isisk/.platformio/packages/framework-zephyr/lib/libc/common/include",
+                ""
+            ]
+        }
+    ],
+    "version": 4
+}
