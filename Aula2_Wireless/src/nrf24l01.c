@@ -62,20 +62,21 @@ void nrf24_clear_irq_flags(void) {
 }
 
 void nrf24_init_gpio(void) {
-    /* Habilita o clock do PORTE */
+    printk("[1/3] Habilitando clock do PORTE...\n");
     SIM->SCGC5 |= SIM_SCGC5_PORTE_MASK;
 
-    /* Configura PTE30, PTE4 e PTE20 como GPIO (MUX = 1) */
+    printk("[2/3] Configurando MUX dos pinos como GPIO...\n");
     PORTE->PCR[CE_PIN]  = PORT_PCR_MUX(1);
     PORTE->PCR[CSN_PIN] = PORT_PCR_MUX(1);
     PORTE->PCR[IRQ_PIN] = PORT_PCR_MUX(1);
 
-    /* CE e CSN como Saídas, IRQ (PTE20) como Entrada */
-    PTE->PDDR |= (1u << CE_PIN) | (1u << CSN_PIN);
-    PTE->PDDR &= ~(1u << IRQ_PIN);
-
-    csn_high();
-    ce_low();
+    printk("[3/3] Configurando direcoes de entrada/saida...\n");
+    PTE->PDDR |= (1u << CE_PIN) | (1u << CSN_PIN); // Saídas
+    PTE->PDDR &= ~(1u << IRQ_PIN);                 // Entrada
+    
+    // Estado inicial dos pinos de controle
+    PTE->PSOR = (1u << CSN_PIN); // CSN High (Desabilitado)
+    PTE->PCOR = (1u << CE_PIN);  // CE Low (Standby)
 }
 
 void nrf24_init(void) {
@@ -182,17 +183,10 @@ uint8_t nrf24_send_message(char *tx_message) {
     ce_high();
     delay_us(15);
     
-    uint32_t timeout = 10000;
     nrf24_read(STATUS, &status, 1);
-    while (!(status & (1 << TX_DS)) && !(status & (1 << MAX_RT)) && --timeout) {
+    while (!(status & (1 << TX_DS)) && !(status & (1 << MAX_RT))) {
         nrf24_read(STATUS, &status, 1);
     }
-
-if (timeout == 0) {
-    // Comunicação SPI falhou ou rádio não respondeu
-    ce_low();
-    return 0; 
-}
 
     nrf24_read(FIFO_STATUS, &fifo_status, 1);
 
