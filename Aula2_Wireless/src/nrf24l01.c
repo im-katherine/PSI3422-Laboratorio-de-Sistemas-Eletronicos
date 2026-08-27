@@ -157,87 +157,105 @@ uint8_t nrf24_write(uint8_t register_address, uint8_t *data, unsigned int bytes)
 }
 
 uint8_t nrf24_send_message(char *tx_message) {
-    uint8_t status, fifo_status, config_register;
+    uint8_t status, config_register;
     uint8_t length = strlen(tx_message);
 
+    // 1. Coloca CE em LOW para poder reconfigurar o rádio
+    ce_low();
+
+    // 2. Configura modo Transmissor (PRIM_RX = 0, PWR_UP = 1)
     nrf24_read(CONFIG, &config_register, 1);
     config_register &= ~(1 << PRIM_RX);
+    config_register |= (1 << PWR_UP);
     nrf24_write(CONFIG, &config_register, 1);
 
-    nrf24_send_spi(FLUSH_RX, 0, 0);
+    // OBRIGATÓRIO: Aguarda estabilização do hardware do nRF24 (130us min)
+    delay_us(150);
+
+    // 3. Limpa FIFOs e flags antigas
     nrf24_send_spi(FLUSH_TX, 0, 0);
+    nrf24_send_spi(FLUSH_RX, 0, 0);
     nrf24_clear_irq_flags();
 
+    // 4. Carrega a mensagem na FIFO do TX
     csn_low();
-    if (AUTO_ACK) spi_send(SPI_1, W_TX_PAYLOAD);
-    else spi_send(SPI_1, W_TX_PAYLOAD_NOACK);
-    
-    uint8_t i = 0;
-    while (i <= length) {
-        spi_send(SPI_1, tx_message[i]);
-        i++;
+    if (AUTO_ACK) {
+        spi_send(SPI_1, W_TX_PAYLOAD);
+    } else {
+        spi_send(SPI_1, W_TX_PAYLOAD_NOACK);
     }
-    spi_send(SPI_1, 0);
+    
+    for (uint8_t i = 0; i < length; i++) {
+        spi_send(SPI_1, tx_message[i]);
+    }
+    spi_send(SPI_1, 0); // Terminador nulo
     csn_high();
 
+    // 5. Pulso no pino CE para iniciar a transmissão RF
     ce_high();
-    delay_us(15);
-    
-    nrf24_read(STATUS, &status, 1);
-    while (!(status & (1 << TX_DS)) && !(status & (1 << MAX_RT))) {
+    delay_us(20);
+    ce_low();
+
+    // 6. Aguarda finalização da transmissão COM TIMEOUT para não travar
+    uint32_t timeout = 5000;
+    do {
         nrf24_read(STATUS, &status, 1);
-    }
+        delay_us(10);
+        timeout--;
+    } while (!(status & (1 << TX_DS)) && !(status & (1 << MAX_RT)) && (timeout > 0));
 
-    nrf24_read(FIFO_STATUS, &fifo_status, 1);
-
-    if ((status & (1 << MAX_RT)) || (status & (TX_FULL))) {
+    // Trata estouro de tempo ou limite de retransmissões atingido
+    if (timeout == 0 || (status & (1 << MAX_RT))) {
         nrf24_send_spi(FLUSH_TX, 0, 0);
         nrf24_clear_irq_flags();
-        ce_low();
-        return 0;
+        return 0; // Retorna falha
     }
 
+    // Sucesso na transmissão
     nrf24_send_spi(FLUSH_TX, 0, 0);
     nrf24_clear_irq_flags();
-    ce_low();
-    
     return 1;
 }
 
 char * nrf24_read_message(void) {
-    uint8_t config_register, width, status;
+    uint8_t status, config_register, width;
     static char rx_message[32];
     memset(rx_message, 0, 32);
 
-    ce_low();
+    // Garante que o rádio está configurado como RECEPTOR
     nrf24_read(CONFIG, &config_register, 1);
-    config_register |= (1 << PRIM_RX);
-    nrf24_write(CONFIG, &config_register, 1);
+    if (!(config_register & (1 << PRIM_RX))) {
+        config_register |= (1 << PRIM_RX) | (1 << PWR_UP);
+        nrf24_write(CONFIG, &config_register, 1);
+        delay_us(150);
+    }
 
+    // Mantém o rádio escutando continuamente
     ce_high();
-    delay_us(130);
 
     nrf24_read(STATUS, &status, 1);
     if (!(status & (1 << RX_DR))) {
         return "failed";
     }
 
+    // Dados recebidos: interrompe escuta para ler FIFO
     ce_low();
 
     nrf24_read(R_RX_PL_WID, &width, 1);
 
-    if (width > 32) {
+    if (width > 32 || width == 0) {
         nrf24_send_spi(FLUSH_RX, 0, 0);
         nrf24_clear_irq_flags();
+        ce_high();
         return "failed";
     }
 
-    if (width > 0) {
-        nrf24_send_spi(R_RX_PAYLOAD, &rx_message, width);
-    }
-
+    nrf24_send_spi(R_RX_PAYLOAD, rx_message, width);
     nrf24_send_spi(FLUSH_RX, 0, 0);
     nrf24_clear_irq_flags();
+
+    // Retorna a escutar o canal RF
+    ce_high();
 
     if (strlen(rx_message) > 0) return rx_message;
     return "failed";
