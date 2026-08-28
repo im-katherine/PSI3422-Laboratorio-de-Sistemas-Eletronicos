@@ -1,11 +1,12 @@
 #include "nrf24l01.h"
 #include "spi.h"
 #include <string.h>
+#include <zephyr/kernel.h>
 
 // Definições de pinos (Porta E)
 #define CE_PIN   30u // PTE30
 #define CSN_PIN  4u  // PTE4
-#define IRQ_PIN  20u // PTE20 (Alterado de PTE5)
+#define IRQ_PIN  20u // PTE20
 
 // Endereço e configurações de rádio
 static uint8_t rx_address[5] = { 0x37, 0xa7, 0xe0, 0xb3, 0x97 };
@@ -25,18 +26,12 @@ static uint8_t tx_address[5] = { 0x37, 0xa7, 0xe0, 0xb3, 0x97 };
 
 static uint8_t send_to_spi;
 
-/* Delays simples Bare Metal */
 static void delay_us(uint32_t us) {
-    uint32_t count = us * 4;
-    while (count--) {
-        __asm("nop");
-    }
+    k_busy_wait(us);
 }
 
 static void delay_ms(uint32_t ms) {
-    while (ms--) {
-        delay_us(1000);
-    }
+    k_msleep(ms);
 }
 
 /* Funções de controle de pinos via registrador do Kinetis (PTE) */
@@ -73,7 +68,7 @@ void nrf24_init_gpio(void) {
     printk("[3/3] Configurando direcoes de entrada/saida...\n");
     PTE->PDDR |= (1u << CE_PIN) | (1u << CSN_PIN); // Saídas
     PTE->PDDR &= ~(1u << IRQ_PIN);                 // Entrada
-    
+
     // Estado inicial dos pinos de controle
     PTE->PSOR = (1u << CSN_PIN); // CSN High (Desabilitado)
     PTE->PCOR = (1u << CE_PIN);  // CE Low (Standby)
@@ -84,7 +79,19 @@ void nrf24_init(void) {
 
     /* Inicializa a biblioteca SPI1 (PTE1=MOSI, PTE2=SCK, PTE3=MISO) */
     spi_init(SPI_1, ALT_0, 0, 2, CS_MAN);
-    
+
+    // Garante CE em nível baixo para permitir escrita nos registradores
+    ce_low();
+    csn_high();
+    delay_ms(10);
+
+    // Comando ACTIVATE (0x50, 0x73) para destravar chips Si24R1/clones
+    csn_low();
+    spi_exchange(SPI_1, 0x50);
+    spi_exchange(SPI_1, 0x73);
+    csn_high();
+    delay_ms(10);
+
     delay_ms(100);
 
     /* Configura CONFIG */
@@ -130,9 +137,9 @@ void nrf24_init(void) {
 
     nrf24_send_spi(FLUSH_RX, 0, 0);
     nrf24_send_spi(FLUSH_TX, 0, 0);
-    
+
     nrf24_write(RX_ADDR_P0 + READ_PIPE, rx_address, 5);
-    nrf24_write(TX_ADDR, tx_address, 5);    
+    nrf24_write(TX_ADDR, tx_address, 5);
     send_to_spi = (1 << READ_PIPE) | 0x03;
     nrf24_write(EN_RXADDR, &send_to_spi, 1);
 }
@@ -169,7 +176,6 @@ uint8_t nrf24_send_message(char *tx_message) {
     config_register |= (1 << PWR_UP);
     nrf24_write(CONFIG, &config_register, 1);
 
-    // OBRIGATÓRIO: Aguarda estabilização do hardware do nRF24 (130us min)
     delay_us(150);
 
     // 3. Limpa FIFOs e flags antigas
@@ -180,15 +186,15 @@ uint8_t nrf24_send_message(char *tx_message) {
     // 4. Carrega a mensagem na FIFO do TX
     csn_low();
     if (AUTO_ACK) {
-        spi_send(SPI_1, W_TX_PAYLOAD);
+        spi_exchange(SPI_1, W_TX_PAYLOAD);
     } else {
-        spi_send(SPI_1, W_TX_PAYLOAD_NOACK);
+        spi_exchange(SPI_1, W_TX_PAYLOAD_NOACK);
     }
-    
+
     for (uint8_t i = 0; i < length; i++) {
-        spi_send(SPI_1, tx_message[i]);
+        spi_exchange(SPI_1, tx_message[i]);
     }
-    spi_send(SPI_1, 0); // Terminador nulo
+    spi_exchange(SPI_1, 0); // Terminador nulo
     csn_high();
 
     // 5. Pulso no pino CE para iniciar a transmissão RF
@@ -204,8 +210,17 @@ uint8_t nrf24_send_message(char *tx_message) {
         timeout--;
     } while (!(status & (1 << TX_DS)) && !(status & (1 << MAX_RT)) && (timeout > 0));
 
-    // Trata estouro de tempo ou limite de retransmissões atingido
+    // TESTE 2: Diagnóstico detalhado em caso de falha de transmissão[cite: 2]
     if (timeout == 0 || (status & (1 << MAX_RT))) {
+        printk("[DIAGNOSTICO TX] Falha no envio! Registrador STATUS: 0x%02X\n", status);
+        
+        if (status & (1 << MAX_RT)) {
+            printk(" -> Causa: MAX_RT (Receptor nao enviou Auto-ACK. Verifique endereco, canal RF e alimentacao no RX).\n");
+        }
+        if (timeout == 0) {
+            printk(" -> Causa: TIMEOUT (O chip nRF24 nao concluiu o disparo de RF via pino CE).\n");
+        }
+
         nrf24_send_spi(FLUSH_TX, 0, 0);
         nrf24_clear_irq_flags();
         return 0; // Retorna falha

@@ -30,6 +30,47 @@ int main(void) {
     printk("\n=== Sistema nRF24L01 Inicializado ===\n");
     nrf24_init();
 
+    // Teste de pulso nos pinos de controle
+    printk("[TESTE GPIO] Alternando CSN e CE...\n");
+    ce_low();
+    csn_low();
+    k_msleep(10);
+    csn_high();
+    ce_high();
+    k_msleep(10);
+    ce_low();
+
+    // Leitura final do CONFIG
+    uint8_t cfg = 0;
+    nrf24_read(CONFIG, &cfg, 1);
+    printk("[TESTE CONFIG] Valor final: 0x%02X (Esperado: 0x0E ou 0x3F)\n", cfg);
+
+    // TESTE 0: Escrita no registrador RF_CH (Canal)
+    uint8_t ch_write = 0x55; // Padrao de bits alternados (01010101)
+    uint8_t ch_read = 0;
+
+    nrf24_write(RF_CH, &ch_write, 1);
+    nrf24_read(RF_CH, &ch_read, 1);
+
+    printk("[TESTE MOSI] Canal escrito: 0x55 | Canal lido: 0x%02X\n", ch_read);
+
+    if (ch_read == 0x55) {
+        printk("[OK MOSI] Linha MOSI funcionando perfeitamente!\n");
+    } else {
+        printk("[ERRO MOSI] Fio MOSI (PTE1) desconectado ou com mau contato.\n");
+    }
+
+    // TESTE 1: Sanidade da Comunicação SPI
+    uint8_t config_test = 0;
+    nrf24_read(CONFIG, &config_test, 1);
+    printk("[TESTE SPI] Valor lido do registrador CONFIG: 0x%02X\n", config_test);
+
+    if (config_test == 0x00 || config_test == 0xFF) {
+        printk("[ERRO SPI] Falha de hardware! Verifique os pinos MISO, MOSI, SCK, CSN e GND.\n");
+    } else {
+        printk("[OK SPI] Comunicacao SPI validada com sucesso!\n");
+    }
+
 #if defined(ROLE_TX)
     console_init();
     printk("[Perfil: TRANSMISSOR]\n");
