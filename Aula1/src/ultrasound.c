@@ -78,7 +78,7 @@ void handler_sensor()
     
     TPM1->STATUS |= TPM_STATUS_CH0F_MASK; 
 
-    if (PTE->PDIR & (1 << 20)) 
+    if (PTA->PDIR & (1 << 12)) 
     {
         last_capture = current_capture;
     } 

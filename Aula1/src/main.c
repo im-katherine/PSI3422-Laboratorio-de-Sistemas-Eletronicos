@@ -4,61 +4,59 @@
 
 #include "ultrasound.h"
 
+const struct device *gpio_a;
 const struct device *gpio_c;
+const struct device *gpio_d;
 
 /*
  * PINOS DA PONTE H:
  *
- * 0 - Esquerda frente
- * 7 - Esquerda trás
- *
- * 3 - Direita frente
- * 4 - Direita trás
- */
+/* Motor esquerdo: IN1=PTD4, IN2=PTA4 */
+/* Motor direito : IN3=PTC9, IN4=PTD1 */
 
 void parar(void)
 {
-    gpio_pin_set(gpio_c, 7, 0);
-    gpio_pin_set(gpio_c, 0, 0);
+    gpio_pin_set(gpio_d, 4, 0);
+    gpio_pin_set(gpio_a, 4, 0);
 
-    gpio_pin_set(gpio_c, 3, 0);
-    gpio_pin_set(gpio_c, 4, 0);
+    gpio_pin_set(gpio_c, 9, 0);
+    gpio_pin_set(gpio_d, 1, 0);
 }
 
 void frente(void)
 {
-    gpio_pin_set(gpio_c, 7, 0);
-    gpio_pin_set(gpio_c, 0, 1);
+    gpio_pin_set(gpio_d, 4, 0);
+    gpio_pin_set(gpio_a, 4, 1);
 
-    gpio_pin_set(gpio_c, 3, 1);
-    gpio_pin_set(gpio_c, 4, 0);
+    gpio_pin_set(gpio_c, 9, 1);
+    gpio_pin_set(gpio_d, 1, 0);
 }
 
 void tras(void)
 {
-    gpio_pin_set(gpio_c, 7, 1);
-    gpio_pin_set(gpio_c, 0, 0);
+    gpio_pin_set(gpio_d, 4, 1);
+    gpio_pin_set(gpio_a, 4, 0);
 
-    gpio_pin_set(gpio_c, 3, 0);
-    gpio_pin_set(gpio_c, 4, 1);
+    gpio_pin_set(gpio_c, 9, 0);
+    gpio_pin_set(gpio_d, 1, 1);
 }
 
 void direita(void)
 {
-    gpio_pin_set(gpio_c, 7, 0);
-    gpio_pin_set(gpio_c, 0, 1);
+    gpio_pin_set(gpio_d, 4, 0);
+    gpio_pin_set(gpio_a, 4, 1);
 
-    gpio_pin_set(gpio_c, 3, 0);
-    gpio_pin_set(gpio_c, 4, 1);
+    gpio_pin_set(gpio_c, 9, 0);
+    gpio_pin_set(gpio_d, 1, 1);
 }
 
 void esquerda(void)
 {
-    gpio_pin_set(gpio_c, 7, 0);
-    gpio_pin_set(gpio_c, 0, 1);
+    gpio_pin_set(gpio_d, 4, 1);
+    gpio_pin_set(gpio_a, 4, 0);
 
-    gpio_pin_set(gpio_c, 3, 1);
-    gpio_pin_set(gpio_c, 4, 0);
+    gpio_pin_set(gpio_c, 9, 1);
+    gpio_pin_set(gpio_d, 1, 0);
 }
 
 /*
@@ -77,7 +75,7 @@ void esquerda(void)
 int main(void)
 {
     printk("Iniciando programa...\n");
-
+///////
     gpio_c = DEVICE_DT_GET(DT_NODELABEL(gpioc));
 
     if (!device_is_ready(gpio_c))
@@ -86,10 +84,29 @@ int main(void)
         return -1;
     }
 
-    gpio_pin_configure(gpio_c, 7, GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(gpio_c, 0, GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(gpio_c, 3, GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure(gpio_c, 4, GPIO_OUTPUT_INACTIVE);
+    gpio_pin_configure(gpio_c, 9, GPIO_OUTPUT_INACTIVE);
+/////
+    gpio_a = DEVICE_DT_GET(DT_NODELABEL(gpioa));
+     if (!device_is_ready(gpio_a))
+    {
+        printk("Erro ao acessar GPIOA!\n");
+        return -1;
+    }
+
+    gpio_pin_configure(gpio_a, 4, GPIO_OUTPUT_INACTIVE);
+/////
+      
+    gpio_d = DEVICE_DT_GET(DT_NODELABEL(gpiod));
+     
+    if (!device_is_ready(gpio_d))
+    {
+        printk("Erro ao acessar GPIOD!\n");
+        return -1;
+    }
+
+    gpio_pin_configure(gpio_d, 1, GPIO_OUTPUT_INACTIVE);
+    gpio_pin_configure(gpio_d, 4, GPIO_OUTPUT_INACTIVE);
+/////
 
     parar();
 
