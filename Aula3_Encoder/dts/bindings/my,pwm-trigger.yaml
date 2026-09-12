@@ -1,0 +1,10 @@
+description: Custom PWM trigger node
+
+compatible: "my,pwm-trigger"
+
+include: base.yaml
+
+properties:
+  pwms:
+    type: phandle-array
+    required: true
