@@ -22,7 +22,7 @@ const struct device *gpio_d;
 
 #define WHEEL_DIAMETER_M    0.065f
 #define PULSES_PER_REV      16
-#define FATOR_CORRECAO      0.2f
+#define FATOR_CORRECAO      0.8f
 #define PI_VAL              3.14159265f
 #define WHEEL_CIRCUMFERENCE (PI_VAL * WHEEL_DIAMETER_M)
 
