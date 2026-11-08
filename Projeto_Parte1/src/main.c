@@ -71,7 +71,7 @@ void tras(void) {
 
 void direita(void) {
     gpio_pin_set(gpio_d, 4, 0); gpio_pin_set(gpio_a, 4, 1);
-    gpio_pin_set(gpio_c, 9, 0); gpio_pin_set(gpio_d, 1, 1);
+    gpio_pin_set(gpio_c, 9, 0); gpio_pin_set(gpio_d, 1, 0);
 }
 
 #define DISTANCIA_MINIMA_CM 15
@@ -122,7 +122,20 @@ int main(void) {
     printk("\n========================================\n");
     printk("=== Sistema nRF24L01 + Carrinho + Encoders ===\n");
     printk("========================================\n");
+
+    // 1. Inicialização do módulo nRF24L01
     nrf24_init();
+
+    // 2. DIAGNÓSTICO SPI: Leitura direta do registador CONFIG para validar comunicação física
+    uint8_t config_test = 0;
+    nrf24_read(CONFIG, &config_test, 1);
+    printk("[DIAGNOSTICO SPI] Registrador CONFIG lido: 0x%02X\n", config_test);
+
+    if (config_test == 0x00 || config_test == 0xFF || config_test == 0x08) {
+        printk("[ERRO CRITICO] Rádio inacessível ou em Power Down! Verifique a linha MOSI (PTE1) / conexões.\n");
+    } else {
+        printk("[OK SPI] Rádio configurado com sucesso e pronto para operar!\n");
+    }
 
 #if defined(ROLE_TX)
     console_init();
@@ -214,7 +227,7 @@ int main(void) {
             }
         }
 
-        // 2. Navegacao com tratamento de estouro e monitoramento
+        // 2. Navegação com tratamento de estouro e monitorização
         if (estado_andando) {
             uint32_t ticks = sensor_read_distance();
 
