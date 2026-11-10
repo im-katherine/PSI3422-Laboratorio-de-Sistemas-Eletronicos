@@ -1,5 +1,18 @@
-// cliente6.cpp
-#include "projeto.hpp"
+/* cliente6.cpp - Reconhecimento de digito + Maquina de Estados
+   
+   RESUMO DA MAQUINA DE ESTADOS:
+   0 = procura/segue placa --> placa grande (escala<=1) --> 1  
+   1 = para --> espera inercia por 1s --> 2
+   2 = leitura do digito 
+       --> não vê placa--> 0
+       --> digito 0/1 --> 4 
+       --> outros digitos --> 3
+   3 = manobra de acordo com o digito --> execucao --> 5
+   4 = encerra o programa
+   5 = para --> espera inercia por 0.5s -> 0
+*/
+
+#include "projeto.hpp"  // Inclui raspberry.hpp + classes CLIENT/SERVER
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <omp.h>
@@ -8,25 +21,27 @@
 using namespace std;
 using namespace cv;
 
-// Estrutura para os modelos de Template Matching
+// Variavel personalizada - Estrutura da placa p/ modelos de Template Matching
 struct EscalaModelo {
-    Mat_<FLT> T_pre;
-    Mat_<FLT> T_raw;
-    float escala_val;
-    int cols, rows;
+    Mat_<FLT> T_pre;    // guarda imagem pre-processada do molde (float p/ precisao e negativos, evita overflow)
+    Mat_<FLT> T_raw;    // molde "puro"
+    float escala_val;   // fator de reducao
+    int cols, rows;     // largura e altura desse molde
 };
 
-// Função para encontrar os picos de deteção
+// Encontrar os picos de deteccao no mapa do OpenCV
 vector<Point> acharPicos(const Mat_<FLT>& mapa, int limite, int dist) {
-    vector<Point> picos;
-    Mat_<FLT> work_map = mapa.clone();
+    vector<Point> picos; // vetor de coordenadas
+    Mat_<FLT> work_map = mapa.clone(); // para poder apagar os picos da copia ao encontrar 
     
+    // Loop ate acabar ou atingir o limite de picos
     for(int i = 0; i < limite; i++) {
-        double maxVal; Point maxLoc;
-        minMaxLoc(work_map, NULL, &maxVal, NULL, &maxLoc);
-        if (maxVal <= 0.0) break; 
-        
+        double maxVal; Point maxLoc;  // pontuacao e coordenadas do pico 
+        minMaxLoc(work_map, NULL, &maxVal, NULL, &maxLoc); // varre a matriz encontrando maximo (nao quero minimo -> null)
+        if (maxVal <= 0.0) break; // se nao tem mais picos, interrompe o loop
         picos.push_back(maxLoc);
+
+        // Apaga o pico ja encontrado (cria um quadrado preto em volta)
         int startX = max(0, maxLoc.x - dist);
         int startY = max(0, maxLoc.y - dist);
         int endX = min(work_map.cols - 1, maxLoc.x + dist);
@@ -39,28 +54,30 @@ vector<Point> acharPicos(const Mat_<FLT>& mapa, int limite, int dist) {
 }
 
 int main(int argc, char** argv) {
+    // Verifica se o comando no terminal esta completo
     if (argc < 3) erro("Uso: cliente6 <IP_Raspberry> <videosaida.avi> [t/c]\n");
 
-    // Ligar à Raspberry Pi
+    // Instancia o cliente e tenta conectar na raspberry
     CLIENT client(argv[1]);
 
     // 1. CARREGAR MNIST E TREINAR IA
-    cout << "A carregar modelo MNIST..." << endl;
+    cout << "Carregando modelo MNIST..." << endl;
     MNIST mnist(14, true, true);
-    mnist.le("./"); 
-    flann::Index flann_index(mnist.ax, flann::KDTreeIndexParams(4));
+    mnist.le("./");  // le os arquivos de treinamento
+    flann::Index flann_index(mnist.ax, flann::KDTreeIndexParams(4)); // organiza os exemplos em uma arvore de busca rapida
 
-    // 2. PREPARAR 10 ESCALAS DA PLACA
-    Mat_<COR> temp_COR = imread("quadrado.png", 1);
-    if (temp_COR.total() == 0) erro("Erro: quadrado.png nao encontrado!");
-    
+    // 2. PREPARA 10 ESCALAS DA PLACA
+    // Converte a matriz colorida da placa em um float
+    Mat_<COR> temp_COR = imread("quadrado.png", 1); 
+    if (temp_COR.total() == 0) erro("Erro: quadrado.png nao encontrado!"); 
     Mat_<FLT> T_original;
     converte(temp_COR, T_original);
     
-    vector<EscalaModelo> modelos(10);
-    float fator = 0.1721; 
+    vector<EscalaModelo> modelos(10); //prepara um vetor p/ guardar as 10 escalas
+    float fator = 0.1721;  
     float decrecimo = pow(0.0473 / 0.1721, 1.0/9.0); 
     
+    // Redimensiona a imagem, remove cinza medio (rejeicao DC) e salva a versao otimizada
     for(int s = 0; s < 10; s++) {
         Mat_<FLT> T_redim;
         resize(T_original, T_redim, Size(), fator, fator, INTER_NEAREST);
@@ -73,40 +90,41 @@ int main(int argc, char** argv) {
         fator *= decrecimo;
     }
 
-    // 3. CONFIGURAR GRAVAÇÃO DE VÍDEO E MÁQUINA DE ESTADOS
-    // A Raspberry Pi envia vídeo a 320x240
+    // 3. CONFIGURAR GRAVACAO DE VIDEO E MAQUINA DE ESTADOS
+    // Abre o arquivo de video (320x240)
     VideoWriter vo(argv[2], VideoWriter::fourcc('X','V','I','D'), 20, Size(320, 240));
-    bool mostrar_tela = (argc >= 4 && argv[3][0] == 't');
+    bool mostrar_tela = (argc >= 4 && argv[3][0] == 't'); //se tem t no comando, abre a janela grafica
 
-    vector<Mat_<FLT>> R_cc(10);
-    vector<Mat_<FLT>> R_ncc(10);
+    vector<Mat_<FLT>> R_cc(10);   // Cross-Correlation - armazena os mapas da busca preliminar
+    vector<Mat_<FLT>> R_ncc(10);  // Normalized Cross-Correlation - mapas da busca refinada
 
-    int estado = 0;
+    // Prepara as memorias da FSM (estado atual, cronometro, ultimo digito encontrado)
+    int estado = 0; 
     double t_estado = timeSinceEpoch();
     int digito_memoria = -1;
     
     // 4. LOOP PRINCIPAL
     while (true) {
-        // --- RECEBER IMAGEM ---
+        // Recebe tamanho da imagem
         int tam;
         client.receiveBytes(4, (BYTE*)&tam);
-        if (tam <= 0) break; 
+        if (tam <= 0) break; // se vier zero, a conexao caiu --> quebra o loop
         
-        vector<BYTE> buffer(tam);
-        client.receiveBytes(tam, buffer.data());
-        Mat_<COR> frame_COR = imdecode(buffer, 1);
+        vector<BYTE> buffer(tam);                   // cria espaco na memoria para a imagem
+        client.receiveBytes(tam, buffer.data());    // recebe a imagem do servidor
+        Mat_<COR> frame_COR = imdecode(buffer, 1);  // descompacta os bytes recebidos
         if (frame_COR.empty()) break;
 
         Mat_<FLT> frame_FLT;
-        converte(frame_COR, frame_FLT);
+        converte(frame_COR, frame_FLT); // pega a foto colorida (0 a 255) da rede e converte para float
 
-        Point melhor_pt(0,0);
-        float melhor_ncc = 0;
-        int melhor_escala = -1;
+        Point melhor_pt(0,0);    // posicao da placa de maior clareza
+        float melhor_ncc = 0;    // melhor nivel de confianca (NCC) 
+        int melhor_escala = -1;  // guarda o tamanho com maior nota (escala de 0 a 9)
 
-        // Otimização: Só procurar a placa ativamente nos Estados 0 e 2
+        // Otimizacao: procura a placa ativamente apenas nos estados 0 e 2
         if (estado == 0 || estado == 2) {
-            #pragma omp parallel for
+            #pragma omp parallel for  // executa o codigo paralelamente nos nucleos do processador
             for (int s = 0; s < 10; s++) {
                 R_cc[s] = matchTemplateSame(frame_FLT, modelos[s].T_pre, TM_CCORR, 0.0);
                 R_ncc[s] = matchTemplateSame(frame_FLT, modelos[s].T_raw, TM_CCOEFF_NORMED, 0.0);
@@ -127,7 +145,7 @@ int main(int argc, char** argv) {
         BYTE v_esq = 0, v_dir = 0;
         double decorrido = timeSinceEpoch() - t_estado;
 
-        // --- LÓGICA DA MÁQUINA DE ESTADOS FINITA ---
+        // LOGICA DA MAQUINA DE ESTADOS FINITA
         switch(estado) {
             case 0: // Procurar e Seguir
                 if (melhor_escala != -1 && melhor_ncc > 0.50) { // Limiar mais tolerante (0.50)

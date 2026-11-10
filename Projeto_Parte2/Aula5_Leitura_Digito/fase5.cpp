@@ -1,4 +1,4 @@
-// fase5.cpp
+// fase5.cpp - Reconhecimento de digito
 #include "raspberry.hpp"
 #include <opencv2/opencv.hpp>
 #include <vector>
