@@ -126,14 +126,14 @@ int main(int argc, char** argv) {
         if (estado == 0 || estado == 2) {
             #pragma omp parallel for  // executa o codigo paralelamente nos nucleos do processador
             for (int s = 0; s < 10; s++) {
-                R_cc[s] = matchTemplateSame(frame_FLT, modelos[s].T_pre, TM_CCORR, 0.0);
-                R_ncc[s] = matchTemplateSame(frame_FLT, modelos[s].T_raw, TM_CCOEFF_NORMED, 0.0);
+                R_cc[s] = matchTemplateSame(frame_FLT, modelos[s].T_pre, TM_CCORR, 0.0); // compara com o modelo pre processado e guarda o mapa de calor em Rcc
+                R_ncc[s] = matchTemplateSame(frame_FLT, modelos[s].T_raw, TM_CCOEFF_NORMED, 0.0); // busca refinada, compara o frame com o modelu cru e gera um segundo mapa
             }
             
-            for (int s = 0; s < 10; s++) {
-                vector<Point> picos = acharPicos(R_cc[s], 2, 10);
-                for(Point p : picos) {
-                    if (R_ncc[s](p.y, p.x) > melhor_ncc) {
+            for (int s = 0; s < 10; s++) { // segundo loop, sem paralelismo, para evitar condicao de corrida
+                vector<Point> picos = acharPicos(R_cc[s], 2, 10); // devolve os dois melhores picos do Rcc
+                for(Point p : picos) { // analisa os 2 picos
+                    if (R_ncc[s](p.y, p.x) > melhor_ncc) {  // verificacao cruzada com o Rncc. se for o melhor, atualiza as variaveis
                         melhor_ncc = R_ncc[s](p.y, p.x);
                         melhor_pt = p;
                         melhor_escala = s;
@@ -147,115 +147,125 @@ int main(int argc, char** argv) {
 
         // LOGICA DA MAQUINA DE ESTADOS FINITA
         switch(estado) {
-            case 0: // Procurar e Seguir
-                if (melhor_escala != -1 && melhor_ncc > 0.50) { // Limiar mais tolerante (0.50)
-                    if (melhor_escala <= 1) { 
+            case 0: // procurar e seguir
+                if (melhor_escala != -1 && melhor_ncc > 0.50) { // limiar de tolerancia = 0.5
+                    if (melhor_escala <= 1) { // verifica se a placa tem um tamanho bom
                         estado = 1;
-                        t_estado = timeSinceEpoch();
-                    } else {
-                        // Controlo Proporcional (Centralizar a placa)
-                        int erro_x = melhor_pt.x - 160; 
-                        int base = 130; 
-                        float K = 0.5; 
+                        t_estado = timeSinceEpoch(); // zera o cronometro
+                    } else { // se nao tiver, se aproxima da placa
+                        // mini sistema de controle para ajustar rota
+                        int erro_x = melhor_pt.x - 160; // ve o erro de rota (quao longe do centro = 160)
+                        int base = 130; // velocidade
+                        float K = 0.5;  // constante proporcional
+
+                        // ajusta a velocidade de acordo com o erro
                         int calc_esq = base + (K * erro_x);
                         int calc_dir = base - (K * erro_x);
+
+                        // trava de seguranca: mantem na escala 0 a 255
                         v_esq = (calc_esq > 255) ? 255 : (calc_esq < 0 ? 0 : calc_esq);
                         v_dir = (calc_dir > 255) ? 255 : (calc_dir < 0 ? 0 : calc_dir);
                     }
                 }
                 break;
 
-            case 1: // Travar (Esperar inércia)
+            case 1: // travar (esperar inercia)
                 v_esq = 0; v_dir = 0;
-                if (decorrido > 1.0) estado = 2; // 1 segundo imóvel
+                if (decorrido > 1.0) estado = 2; // 1 segundo parado
                 break;
 
-            case 2: // Ler Dígito da Placa
-                v_esq = 0; v_dir = 0;
-                if (melhor_escala <= 1 && melhor_ncc > 0.50) {
+            case 2: // ler digito da placa
+                v_esq = 0; v_dir = 0; // para os motores enquanto a foto eh processada
+
+                if (melhor_escala <= 1 && melhor_ncc > 0.50) { // confirma escala e qualidade antes de ler
+                    // Encontra o centro aproximado da placa
                     int bw = modelos[melhor_escala].cols / 2;
                     int bh = modelos[melhor_escala].rows / 2;
                     
-                    // Margem de 12% para apanhar bem o dígito sem cortar
+                    // Margem de seguranca - Capturar o digito sem cortar nem aparecer a borda preta
                     int margem_x = bw * 0.12; 
                     int margem_y = bh * 0.12;
-                    Rect regiao_digito(melhor_pt.x - bw/2 + margem_x, melhor_pt.y - bh/2 + margem_y, bw - 2*margem_x, bh - 2*margem_y);
-                    regiao_digito &= Rect(0, 0, frame_COR.cols, frame_COR.rows);
+                    Rect regiao_digito(melhor_pt.x - bw/2 + margem_x, melhor_pt.y - bh/2 + margem_y, bw - 2*margem_x, bh - 2*margem_y); // retangulo para recorte
+                    regiao_digito &= Rect(0, 0, frame_COR.cols, frame_COR.rows); // se tentar cortar fora da camera, ajusta
                     
                     if (regiao_digito.area() > 0) {
+                        // Converte o miolo da placa para tons de cinza (MNIST nao entende cores) 
                         Mat_<GRY> img_digito;
                         cvtColor(frame_COR(regiao_digito), img_digito, COLOR_BGR2GRAY);
-                        threshold(img_digito, img_digito, 0, 255, THRESH_BINARY | THRESH_OTSU);
+                        threshold(img_digito, img_digito, 0, 255, THRESH_BINARY | THRESH_OTSU); // limiar de otsu --> encontra o melhor tom de cinza parasepara a caneta do papel
                         
-                        Mat_<GRY> img_bbox = mnist.bbox(img_digito);
+                        Mat_<GRY> img_bbox = mnist.bbox(img_digito);  // funcao do cekeikon para forcar imagem em 14x14
                         Mat_<FLT> digito_flt;
-                        img_bbox.convertTo(digito_flt, CV_32F, 1.0/255.0, 0.0);
-                        digito_flt = digito_flt.reshape(1, 1);
+
+                        // Converte imagem 14x14 p/ uma unica linha de 196 numeros decimais
+                        img_bbox.convertTo(digito_flt, CV_32F, 1.0/255.0, 0.0); 
+                        digito_flt = digito_flt.reshape(1, 1); 
                         
-                        // K-NN (k=5) para maior precisão
+                        // KNN (k=5)
                         int k = 5;
                         Mat indices(1, k, CV_32S);
                         Mat dists(1, k, CV_32F);
                         flann_index.knnSearch(digito_flt, indices, dists, k, flann::SearchParams(32));
                         
+                        // Olha as 5 imagens mais parecidas e decide qual o digito por "votacao" 
                         vector<int> votos(10, 0);
                         for(int i = 0; i < k; i++) votos[ mnist.AY[indices.at<int>(0, i)] ]++;
                         digito_memoria = distance(votos.begin(), max_element(votos.begin(), votos.end()));
                         
-                        // Decidir transição de estado consoante o dígito lido
+                        // Decidir transicao de estado de acordo com o digito vencedor
                         if (digito_memoria == 0 || digito_memoria == 1) {
-                            estado = 4; // Fim da pista
+                            estado = 4; // fim
                         } else {
-                            estado = 3; // Executar manobra cega
+                            estado = 3; // executar manobra
                             t_estado = timeSinceEpoch();
                         }
                     }
                 } else {
-                    estado = 0; // Se não conseguir ler, volta a procurar
+                    estado = 0; // se nao conseguir ler, volta a procurar
                 }
                 break;
 
-            case 3: // Manobras Cegas
-                if (digito_memoria == 6 || digito_memoria == 7) { // 90º Esq
+            case 3: // manobras 
+                if (digito_memoria == 6 || digito_memoria == 7) { // 90 esq
                     v_esq = 0; v_dir = 200;
                     if (decorrido > 1.0) estado = 5; 
                 } 
-                else if (digito_memoria == 8 || digito_memoria == 9) { // 90º Dir
+                else if (digito_memoria == 8 || digito_memoria == 9) { // 90 dir
                     v_esq = 200; v_dir = 0;
                     if (decorrido > 1.0) estado = 5; 
                 } 
-                else if (digito_memoria == 2) { // 180º Esq
+                else if (digito_memoria == 2) { // 180 esq
                     v_esq = 0; v_dir = 200;
                     if (decorrido > 2.0) estado = 5; 
                 } 
-                else if (digito_memoria == 3) { // 180º Dir
+                else if (digito_memoria == 3) { // 180 dir
                     v_esq = 200; v_dir = 0;
                     if (decorrido > 2.0) estado = 5; 
                 } 
-                else if (digito_memoria == 4 || digito_memoria == 5) { // Seguir em frente
+                else if (digito_memoria == 4 || digito_memoria == 5) { // seguir em frente
                     v_esq = 180; v_dir = 180;
                     if (decorrido > 1.5) estado = 5;
                 }
-                if (estado == 5) t_estado = timeSinceEpoch();
+                if (estado == 5) t_estado = timeSinceEpoch(); // ao trocar de estado, reseta o cronometro
                 break;
 
-            case 4: // Encerrar
+            case 4: // encerrar programa
                 v_esq = 0; v_dir = 0;
                 break;
 
-            case 5: // Recuperar (Esperar inércia final e recomeçar)
+            case 5: // recuperacao (esperar inercia e recomecar)
                 v_esq = 0; v_dir = 0;
                 if (decorrido > 0.5) estado = 0; 
                 break;
         }
 
-        // --- ENVIAR COMANDOS PELA REDE ---
+        // ENVIAR COMANDOS PELA REDE
         BYTE cmd[2] = {v_esq, v_dir};
         client.sendBytes(2, cmd);
         
         if (estado == 4) break; // Termina o programa
 
-        // --- DESENHAR INFORMAÇÃO NA TELA ---
+        // DESENHAR INFORMACAO NA TELA
         if (melhor_escala != -1 && melhor_ncc > 0.50) {
             int bw = modelos[melhor_escala].cols / 2;
             int bh = modelos[melhor_escala].rows / 2;
@@ -263,6 +273,7 @@ int main(int argc, char** argv) {
                                  Point(melhor_pt.x + bw, melhor_pt.y + bh), Scalar(0, 255, 255), 2);
         }
 
+        // se estiver com janela grafica, carimba texto de debug no topo
         if (mostrar_tela) {
             char txt_status[100];
             sprintf(txt_status, "Estado: %d | Digito Lido: %d", estado, digito_memoria);
@@ -275,10 +286,10 @@ int main(int argc, char** argv) {
             imshow("Visao do Carrinho", frame_COR);
         }
         
-        // --- GRAVAR FRAME NO VÍDEO ---
+        // GRAVAR FRAME NO VIDEO
         vo << frame_COR;
         
-        // Premir ESC para sair à força
+        // ESC --> Sai a forca
         if (waitKey(1) == 27) break;
     }
 
