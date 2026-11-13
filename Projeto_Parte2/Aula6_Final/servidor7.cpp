@@ -50,9 +50,9 @@ int main() {
         
         // Descompactar nas variaveis (nao salvar direto garante que a memoria nao seja corrompida)
         BYTE v_esq = cmd[0]; 
-        BYTE v_dir = cmd[1];
+        BYTE v_dir = cmd[3];
         BYTE r_esq = cmd[2]; // velocidade de re do motor esquerdo
-        BYTE r_dir = cmd[3]; // velocidade de re do motor direito
+        BYTE r_dir = cmd[1]; // velocidade de re do motor direito
 
         // 3. APLICAR NOS MOTORES
         // Cliente envia de 0 a 255 (tamanho maximo = 1 byte), conversao para a escala do softPwm:
