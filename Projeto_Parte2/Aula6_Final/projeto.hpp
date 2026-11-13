@@ -1,4 +1,7 @@
 // projeto.hpp
+#include <opencv2/opencv.hpp>
+using namespace cv;
+typedef Vec3b COR;
 #include "raspberry.hpp"
 #include <unistd.h>
 #include <sys/types.h>
@@ -7,6 +10,18 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <stdint.h>
+#include <vector>
+
+bool testaVb(const vector<BYTE> vb, BYTE b) {
+    bool igual = true;
+    for (unsigned i = 0; i < vb.size(); i++)
+        if (vb[i] != b) {
+            igual = false;
+            break;
+        }
+    return igual;
+}
 
 bool testaBytes(BYTE* buf, BYTE b, int n) {
     // Testa se n bytes da memoria buf possuem valor b
@@ -98,6 +113,73 @@ public:
             received += bytes;
         }
     }
+    void sendUint(uint32_t m) {
+        uint32_t mnet = htonl(m);
+        sendBytes(sizeof(mnet), (BYTE*)&mnet);
+    }
+
+    void receiveUint(uint32_t& m) {
+        uint32_t mnet;
+        receiveBytes(sizeof(mnet), (BYTE*)&mnet);
+        m = ntohl(mnet);
+    }
+
+    void sendVb(const vector<BYTE>& vb) {
+        sendUint((uint32_t)vb.size());
+
+        uint32_t confirmacao;
+        receiveUint(confirmacao);
+        if (confirmacao != vb.size()) erro("Confirmacao de tamanho incorreta");
+
+        if (!vb.empty())
+            sendBytes((int)vb.size(), (BYTE*)vb.data());
+    }
+
+    void receiveVb(vector<BYTE>& st) {
+        uint32_t tamanho;
+        receiveUint(tamanho);
+
+        st.resize(tamanho);
+        sendUint(tamanho);
+
+        if (tamanho > 0)
+            receiveBytes((int)tamanho, st.data());
+    }
+
+    void sendImg(const Mat_<COR>& img) {
+        if (!img.isContinuous()) erro("Imagem nao continua");
+        sendUint((uint32_t)img.rows);
+        sendUint((uint32_t)img.cols);
+        sendBytes((int)(3 * img.total()), (BYTE*)img.data);
+    }
+
+    void receiveImg(Mat_<COR>& img) {
+        uint32_t nl, nc;
+        receiveUint(nl);
+        receiveUint(nc);
+        if (nl == 0 || nc == 0) erro("Dimensoes de imagem invalidas");
+        img.create((int)nl, (int)nc);
+        receiveBytes((int)(3 * img.total()), (BYTE*)img.data);
+    }
+
+    void sendImgComp(const Mat_<COR>& img) {
+        vector<BYTE> vb;
+        vector<int> param{CV_IMWRITE_JPEG_QUALITY, 80};
+        if (!imencode(".jpg", img, vb, param))
+            erro("Erro ao compactar imagem");
+        sendVb(vb);
+    }
+
+    void receiveImgComp(Mat_<COR>& img) {
+        vector<BYTE> vb;
+        receiveVb(vb);
+        Mat decodificada = imdecode(vb, 1);
+        if (decodificada.empty()) erro("Erro ao descompactar imagem");
+        decodificada.copyTo(img);
+    }
+
+
+
 };
 
 class CLIENT {
@@ -162,4 +244,71 @@ public:
             received += bytes;
         }
     }
+    void sendUint(uint32_t m) {
+        uint32_t mnet = htonl(m);
+        sendBytes(sizeof(mnet), (BYTE*)&mnet);
+    }
+
+    void receiveUint(uint32_t& m) {
+        uint32_t mnet;
+        receiveBytes(sizeof(mnet), (BYTE*)&mnet);
+        m = ntohl(mnet);
+    }
+
+    void sendVb(const vector<BYTE>& vb) {
+        sendUint((uint32_t)vb.size());
+
+        uint32_t confirmacao;
+        receiveUint(confirmacao);
+        if (confirmacao != vb.size()) erro("Confirmacao de tamanho incorreta");
+
+        if (!vb.empty())
+            sendBytes((int)vb.size(), (BYTE*)vb.data());
+    }
+
+    void receiveVb(vector<BYTE>& st) {
+        uint32_t tamanho;
+        receiveUint(tamanho);
+
+        st.resize(tamanho);
+        sendUint(tamanho);
+
+        if (tamanho > 0)
+            receiveBytes((int)tamanho, st.data());
+    }
+
+    void sendImg(const Mat_<COR>& img) {
+        if (!img.isContinuous()) erro("Imagem nao continua");
+        sendUint((uint32_t)img.rows);
+        sendUint((uint32_t)img.cols);
+        sendBytes((int)(3 * img.total()), (BYTE*)img.data);
+    }
+
+    void receiveImg(Mat_<COR>& img) {
+        uint32_t nl, nc;
+        receiveUint(nl);
+        receiveUint(nc);
+        if (nl == 0 || nc == 0) erro("Dimensoes de imagem invalidas");
+        img.create((int)nl, (int)nc);
+        receiveBytes((int)(3 * img.total()), (BYTE*)img.data);
+    }
+
+    void sendImgComp(const Mat_<COR>& img) {
+        vector<BYTE> vb;
+        vector<int> param{CV_IMWRITE_JPEG_QUALITY, 80};
+        if (!imencode(".jpg", img, vb, param))
+            erro("Erro ao compactar imagem");
+        sendVb(vb);
+    }
+
+    void receiveImgComp(Mat_<COR>& img) {
+        vector<BYTE> vb;
+        receiveVb(vb);
+        Mat decodificada = imdecode(vb, 1);
+        if (decodificada.empty()) erro("Erro ao descompactar imagem");
+        decodificada.copyTo(img);
+    }
+
+
+
 };

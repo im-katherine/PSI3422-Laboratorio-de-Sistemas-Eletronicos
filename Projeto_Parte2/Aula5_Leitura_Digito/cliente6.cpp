@@ -4,7 +4,7 @@
    0 = procura/segue placa --> placa grande (escala<=1) --> 1  
    1 = para --> espera inercia por 1s --> 2
    2 = leitura do digito 
-       --> não vê placa--> 0
+       --> nao ve placa--> 0
        --> digito 0/1 --> 4 
        --> outros digitos --> 3
    3 = manobra de acordo com o digito --> execucao --> 5
