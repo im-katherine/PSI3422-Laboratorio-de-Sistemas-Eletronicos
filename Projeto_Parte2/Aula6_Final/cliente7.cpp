@@ -60,28 +60,62 @@ void cliqueMouse(int evento, int x, int y, int, void*) {
     }
 }
 
-void desenharTeclado(Mat_<COR>& tela) {
-    // Fundo cinza escuro para a área do teclado
-    rectangle(tela, Point(320, 0), Point(639, 239), Scalar(60, 60, 60), -1);
-    
-    // Status do Modo no topo
-    string txt_modo = modo_automatico ? "MODO AUTOMATICO (IA)" : "MODO MANUAL";
-    Scalar cor_txt = modo_automatico ? Scalar(0, 255, 0) : Scalar(255, 255, 255);
-    putText(tela, txt_modo, Point(345, 30), FONT_HERSHEY_SIMPLEX, 0.6, cor_txt, 2);
 
-    // Desenhar os botões
+void desenharSeta(Mat_<COR>& tela, int x, int y, int dx, int dy) {
+    Point centro(x + 27, y + 17);
+
+    Point inicio(
+        centro.x - dx * 12,
+        centro.y - dy * 9
+    );
+
+    Point fim(
+        centro.x + dx * 12,
+        centro.y + dy * 9
+    );
+
+    arrowedLine(
+        tela, inicio, fim,
+        Scalar(255, 255, 255),
+        2, LINE_AA, 0, 0.35
+    );
+}
+
+void desenharTeclado(Mat_<COR>& tela) {
+    rectangle(tela, Point(320, 0), Point(639, 239),
+              Scalar(60, 60, 60), -1);
+
+    string txt_modo = modo_automatico
+        ? "MODO AUTOMATICO (IA)"
+        : "MODO MANUAL";
+
+    Scalar cor_txt = modo_automatico
+        ? Scalar(0, 255, 0)
+        : Scalar(255, 255, 255);
+
+    putText(tela, txt_modo, Point(345, 30),
+            FONT_HERSHEY_SIMPLEX, 0.6, cor_txt, 2);
+
+    // Direções das oito setas, na ordem do teclado
+    int dx[9] = {-1, 0, 1, -1, 0, 1, -1, 0, 1};
+    int dy[9] = {-1,-1,-1,  0, 0, 0,  1, 1, 1};
+
     for (int i = 0; i < 9; i++) {
         int x = 345 + (i % 3) * 90;
         int y = 55 + (i / 3) * 55;
-        
-        rectangle(tela, Point(x, y), Point(x + 55, y + 35), Scalar(200, 200, 200), 1);
-        
-        string texto_botao = (i == 4) ? "M/A" : to_string(mapaTeclas[i]);
-        Scalar cor_botao = (i == 4) ? Scalar(0, 0, 255) : Scalar(255, 255, 255);
-        
-        // Ajuste de posição para "M/A" ficar centralizado
-        Point pos_txt = (i == 4) ? Point(x + 10, y + 24) : Point(x + 20, y + 24);
-        putText(tela, texto_botao, pos_txt, FONT_HERSHEY_SIMPLEX, 0.7, cor_botao, 1);
+
+        rectangle(tela, Point(x, y),
+                  Point(x + 55, y + 35),
+                  Scalar(200, 200, 200), 1);
+
+        if (i == 4) {
+            // Botão central: alterna Manual/Automático
+            putText(tela, "M/A", Point(x + 7, y + 24),
+                    FONT_HERSHEY_SIMPLEX, 0.6,
+                    Scalar(0, 0, 255), 2);
+        } else {
+            desenharSeta(tela, x, y, dx[i], dy[i]);
+        }
     }
 }
 
