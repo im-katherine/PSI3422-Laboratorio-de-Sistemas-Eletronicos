@@ -125,13 +125,13 @@ void traduzirComando(int comando, BYTE& v_esq, BYTE& v_dir, BYTE& r_esq, BYTE& r
     v_esq = 0; v_dir = 0; r_esq = 0; r_dir = 0;
     switch (comando) {
         case 8: v_esq = 200; v_dir = 200; break; // Frente
-        case 4: v_esq = 0; v_dir = 200; break;   // Esquerda
-        case 6: v_esq = 200; v_dir = 0; break;   // Direita
-        case 7: v_esq = 100; v_dir = 200; break; // Frente-Esquerda
-        case 9: v_esq = 200; v_dir = 100; break; // Frente-Direita
+        case 4: v_esq = 200; v_dir = 0; break;   // Esquerda
+        case 6: v_esq = 0; v_dir = 200; break;   // Direita
+        case 7: v_esq = 200; v_dir = 100; break; // Frente-Esquerda
+        case 9: v_esq = 100; v_dir = 200; break; // Frente-Direita
         case 2: r_esq = 200; r_dir = 200; break; // Ré
-        case 1: r_esq = 100; r_dir = 200; break; // Ré-Esquerda
-        case 3: r_esq = 200; r_dir = 100; break; // Ré-Direita
+        case 1: r_esq = 200; r_dir = 100; break; // Ré-Esquerda
+        case 3: r_esq = 100; r_dir = 200; break; // Ré-Direita
         default: break;                          // Parado
     }
 }
