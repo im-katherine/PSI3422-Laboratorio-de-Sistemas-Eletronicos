@@ -353,7 +353,7 @@ int main(int argc, char** argv) {
             switch(estado) {
                 case 0: // procurar e seguir
                     if (melhor_escala != -1 && melhor_ncc > 0.50) { // limiar de tolerância = 0.5
-                        if (melhor_escala <= 1) { // verifica se a placa tem um tamanho bom
+                        if (melhor_escala <= 3) { // verifica se a placa tem um tamanho bom
                             estado = 1;
                             t_estado = timeSinceEpoch(); // zera o cronômetro
                         } else { // se não tiver, se aproxima da placa
@@ -362,7 +362,7 @@ int main(int argc, char** argv) {
                             int base = 130; // velocidade
                             float K = 0.5;  // constante proporcional
 
-                            // ajusta a velocidade de acordo com o erro
+// ajusta a velocidade de acordo com o erro
                             int calc_esq = base + (K * erro_x);
                             int calc_dir = base - (K * erro_x);
 
@@ -381,7 +381,7 @@ int main(int argc, char** argv) {
                 case 2: // ler dígito da placa
                     v_esq = 0; v_dir = 0; // para os motores enquanto a foto é processada
 
-                    if (melhor_escala <= 1 && melhor_ncc > 0.50) { // confirma escala e qualidade antes de ler
+                    if (melhor_escala <= 3 && melhor_ncc > 0.50) { // confirma escala e qualidade antes de ler
                         digito_memoria = lerDigito(frame_COR, modelos[melhor_escala], melhor_pt, mnist, flann_index);
                         
                         // Decidir transição de estado de acordo com o dígito vencedor
@@ -402,19 +402,19 @@ int main(int argc, char** argv) {
 
                 case 3: // manobras cegas
                     if (digito_memoria == 6 || digito_memoria == 7) { // 90 esq
-                        v_esq = 0; v_dir = 200;
+                        v_esq = 200; v_dir = 0;
                         if (decorrido > 1.0) estado = 5; 
                     } 
                     else if (digito_memoria == 8 || digito_memoria == 9) { // 90 dir
-                        v_esq = 200; v_dir = 0;
+                        v_esq = 0; v_dir = 200;
                         if (decorrido > 1.0) estado = 5; 
                     } 
                     else if (digito_memoria == 2) { // 180 esq
-                        v_esq = 0; v_dir = 200;
+                        v_esq = 200; v_dir = 0;
                         if (decorrido > 2.0) estado = 5; 
                     } 
                     else if (digito_memoria == 3) { // 180 dir
-                        v_esq = 200; v_dir = 0;
+                        v_esq = 0; v_dir = 200;
                         if (decorrido > 2.0) estado = 5; 
                     } 
                     else if (digito_memoria == 4 || digito_memoria == 5) { // seguir em frente
