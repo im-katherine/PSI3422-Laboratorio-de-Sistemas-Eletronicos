@@ -22,6 +22,7 @@ int main() {
     VideoCapture cam(0); // abre comunicacao com a camera da rasp
     cam.set(CAP_PROP_FRAME_WIDTH, 320);
     cam.set(CAP_PROP_FRAME_HEIGHT, 240);
+    cam.set(CAP_PROP_BUFFERSIZE, 1);
     if (!cam.isOpened()) erro("Erro: Camera nao encontrada!");
 
     // Instancia o servidor e espera pelo cliente

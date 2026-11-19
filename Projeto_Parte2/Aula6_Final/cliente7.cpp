@@ -150,8 +150,8 @@ vector<EscalaModelo> prepararModelos(const string& nome_arquivo) {
     converte(temp_COR, T_original);
     
     vector<EscalaModelo> modelos(10); // prepara um vetor p/ guardar as 10 escalas
-    float fator = 0.1721;  
-    float decrecimo = pow(0.0473 / 0.1721, 1.0/9.0); 
+    float fator = 0.30;  
+    float decrecimo = pow(0.095 / 0.30, 1.0/9.0); 
     
     // Redimensiona a imagem, remove cinza médio (rejeição DC) e salva a versão otimizada
     for(int s = 0; s < 10; s++) {
@@ -353,18 +353,18 @@ int main(int argc, char** argv) {
             switch(estado) {
                 case 0: // procurar e seguir
                     if (melhor_escala != -1 && melhor_ncc > 0.50) { // limiar de tolerância = 0.5
-                        if (melhor_escala <= 3) { // verifica se a placa tem um tamanho bom
+                        if (melhor_escala <= 2) { // verifica se a placa tem um tamanho bom
                             estado = 1;
                             t_estado = timeSinceEpoch(); // zera o cronômetro
                         } else { // se não tiver, se aproxima da placa
                             // mini sistema de controle para ajustar rota
                             int erro_x = melhor_pt.x - 160; // vê o erro de rota (quão longe do centro = 160)
-                            int base = 130; // velocidade
-                            float K = 0.5;  // constante proporcional
+                            int base = 100; // velocidade
+                            float K = 0.35;  // constante proporcional
 
-// ajusta a velocidade de acordo com o erro
-                            int calc_esq = base + (K * erro_x);
-                            int calc_dir = base - (K * erro_x);
+                            // ajusta a velocidade de acordo com o erro
+                            int calc_esq = base - (K * erro_x);
+                            int calc_dir = base + (K * erro_x);
 
                             // trava de segurança: mantém na escala 0 a 255
                             v_esq = (calc_esq > 255) ? 255 : (calc_esq < 0 ? 0 : calc_esq);
@@ -375,13 +375,16 @@ int main(int argc, char** argv) {
 
                 case 1: // travar (esperar inércia)
                     v_esq = 0; v_dir = 0;
-                    if (decorrido > 1.0) estado = 2; // 1 segundo parado
+                    if (decorrido > 1.0) { // 1 segundo parado
+                        estado = 2;
+                        t_estado = timeSinceEpoch();
+                    }
                     break;
 
                 case 2: // ler dígito da placa
                     v_esq = 0; v_dir = 0; // para os motores enquanto a foto é processada
 
-                    if (melhor_escala <= 3 && melhor_ncc > 0.50) { // confirma escala e qualidade antes de ler
+                    if (melhor_escala != -1 && melhor_escala <= 2 && melhor_ncc > 0.50) { // confirma escala e qualidade antes de ler
                         digito_memoria = lerDigito(frame_COR, modelos[melhor_escala], melhor_pt, mnist, flann_index);
                         
                         // Decidir transição de estado de acordo com o dígito vencedor
@@ -392,34 +395,34 @@ int main(int argc, char** argv) {
                         } else if (digito_memoria != -1) {
                             estado = 3; // executar manobra
                             t_estado = timeSinceEpoch();
-                        } else {
+                        } else if (decorrido > 0.5) {
                             estado = 0; // nao conseguiu ler o digito, volta a procurar
                         }
-                    } else {
+                    } else if (decorrido > 0.5) {
                         estado = 0; // se não conseguir ler, volta a procurar
                     }
                     break;
 
                 case 3: // manobras cegas
-                    if (digito_memoria == 6 || digito_memoria == 7) { // 90 esq
+                    if (digito_memoria == 6 || digito_memoria == 7) { // 90 esq - CALIBRAR
                         v_esq = 200; v_dir = 0;
                         if (decorrido > 1.0) estado = 5; 
                     } 
                     else if (digito_memoria == 8 || digito_memoria == 9) { // 90 dir
                         v_esq = 0; v_dir = 200;
-                        if (decorrido > 1.0) estado = 5; 
+                        if (decorrido > 1.2) estado = 5; 
                     } 
-                    else if (digito_memoria == 2) { // 180 esq
+                    else if (digito_memoria == 2) { // 180 esq - CALIBRAR
                         v_esq = 200; v_dir = 0;
                         if (decorrido > 2.0) estado = 5; 
                     } 
                     else if (digito_memoria == 3) { // 180 dir
                         v_esq = 0; v_dir = 200;
-                        if (decorrido > 2.0) estado = 5; 
+                        if (decorrido > 2.4) estado = 5; 
                     } 
                     else if (digito_memoria == 4 || digito_memoria == 5) { // seguir em frente
                         v_esq = 180; v_dir = 180;
-                        if (decorrido > 1.5) estado = 5;
+                        if (decorrido > 1.2) estado = 5;
                     }
                     if (estado == 5) t_estado = timeSinceEpoch(); // ao trocar de estado, reseta o cronômetro
                     break;
