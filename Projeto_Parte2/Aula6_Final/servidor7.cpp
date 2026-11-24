@@ -62,11 +62,9 @@ int main() {
         int pwm_re_esq = (r_esq * 100) / 255;
         int pwm_re_dir = (r_dir * 100) / 255;
 
-        // Coloca a velocidade nos motores. Pinos 0 e 3 = movimento para a frente
-        // Pinos 1 e 2 = movimento para tras (re)
+        // Coloca a velocidade nos motores -> 0 e 3 = frente // 1 e 2 = re
         softPwmWrite(0, pwm_esq); 
         softPwmWrite(1, pwm_re_esq);
-        
         softPwmWrite(2, pwm_re_dir);       
         softPwmWrite(3, pwm_dir);
     }

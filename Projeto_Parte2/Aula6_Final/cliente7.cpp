@@ -12,7 +12,7 @@
    5 = para --> espera inércia por 0.5s -> 0
 */
 
-#include "projeto.hpp"  // Inclui raspberry.hpp + classes CLIENT/SERVER
+#include "projeto.hpp"
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <omp.h>
@@ -21,16 +21,16 @@
 using namespace std;
 using namespace cv;
 
-// --- VARIÁVEIS GLOBAIS (Interface Manual) ---
+// Variaveis globais (interface manual)
 int comandoMouse = 5; // 5 = Parado
 int mapaTeclas[9] = {7, 8, 9, 4, 5, 6, 1, 2, 3};
-bool modo_automatico = false; // Começa no modo manual
+bool modo_automatico = false; // comeca no modo manual
 
-// Variável personalizada - Estrutura da placa p/ modelos de Template Matching
+// Variavel personalizada - Estrutura da placa p/ modelos de Template Matching
 struct EscalaModelo {
-    Mat_<FLT> T_pre;    // guarda imagem pré-processada do molde (float p/ precisão e negativos, evita overflow)
+    Mat_<FLT> T_pre;    // guarda imagem pre-processada do molde (float p/ precisao e negativos, evita overflow)
     Mat_<FLT> T_raw;    // molde "puro"
-    float escala_val;   // fator de redução
+    float escala_val;   // fator de reducao
     int cols, rows;     // largura e altura desse molde
 };
 
@@ -38,90 +38,96 @@ struct EscalaModelo {
    ===================   FUNCOES - MODO MANUAL   ===================
    ================================================================= */ 
 
+// Identifica cliques na janela do programa e executa de acordo
 void cliqueMouse(int evento, int x, int y, int, void*) {
-    if (evento == EVENT_LBUTTONUP && !modo_automatico) comandoMouse = 5; // soltou o botao = para
-    if (evento != EVENT_LBUTTONDOWN) return;
+    if (evento == EVENT_LBUTTONUP && !modo_automatico) comandoMouse = 5; // soltou o botao = para o evento
+    if (evento != EVENT_LBUTTONDOWN) return; // se o evento nao for clicar em algo, sai da funcao
 
+    // Testa cada botao do teclado virtual
     for (int i = 0; i < 9; i++) {
+        // Calcula as coordenadas X e Y do botao i
         int bx = 345 + (i % 3) * 90;
         int by = 55 + (i / 3) * 55;
 
+        // Verifica se o mouse esta na caixa de colisao do botao (55 largura x 35 altura)
         if (x >= bx && x <= bx + 55 && y >= by && y <= by + 35) {
-            // Se clicou no botão central ("5" / "M/A"), alterna o modo
             if (i == 4) { 
-                modo_automatico = !modo_automatico;
-                comandoMouse = 5; // Para o carrinho ao trocar de modo
-            } else if (!modo_automatico) {
-                // Só aceita comandos de direção se estiver no modo manual
-                comandoMouse = mapaTeclas[i];
+                modo_automatico = !modo_automatico; // Se clicou no botao central, alterna o modo
+                comandoMouse = 5; // para o carrinho ao trocar de modo
+            } else if (!modo_automatico) { // so aceita demais comandos no modo manual
+                comandoMouse = mapaTeclas[i]; // salva o n° da tecla clicada de acordo com o mapa 
             }
             return;
         }
     }
 }
 
-
-void desenharSeta(Mat_<COR>& tela, int x, int y, int dx, int dy) {
+// Calcula o centro do botao e faz a seta na direcao dos multiplicadores de direcao (dx e dy)
+void desenharSeta(Mat_<COR>& tela, int x, int y, int dx, int dy) { 
     Point centro(x + 27, y + 17);
 
-    Point inicio(
+    Point inicio( // comeco da seta, recuo no sentido oposto da direcao 
         centro.x - dx * 12,
         centro.y - dy * 9
     );
 
-    Point fim(
+    Point fim( // ponta da seta
         centro.x + dx * 12,
         centro.y + dy * 9
     );
 
-    arrowedLine(
+    arrowedLine(  // funcao que desenha a seta
         tela, inicio, fim,
         Scalar(255, 255, 255),
         2, LINE_AA, 0, 0.35
     );
 }
 
+// Monta o painel lateral na janela, exibe status do moto atual no topo e preenche botoes
 void desenharTeclado(Mat_<COR>& tela) {
     rectangle(tela, Point(320, 0), Point(639, 239),
-              Scalar(60, 60, 60), -1);
+              Scalar(60, 60, 60), -1); // fundo do painel, retangulo solido
 
-    string txt_modo = modo_automatico
+    // Seleciona texto e cor do cabecalho a partir do modo atual
+    string txt_modo = modo_automatico 
         ? "MODO AUTOMATICO (IA)"
         : "MODO MANUAL";
-
     Scalar cor_txt = modo_automatico
         ? Scalar(0, 255, 0)
         : Scalar(255, 255, 255);
-
+    
+    // Escreve status do modo no topo do painel
     putText(tela, txt_modo, Point(345, 30),
             FONT_HERSHEY_SIMPLEX, 0.6, cor_txt, 2);
 
-    // Direções das oito setas, na ordem do teclado
+    // Direcoes das oito setas, na ordem do teclado
     int dx[9] = {-1, 0, 1, -1, 0, 1, -1, 0, 1};
     int dy[9] = {-1,-1,-1,  0, 0, 0,  1, 1, 1};
 
+    // Percorre os 9 botoes do teclado, desenhando o conteudo
     for (int i = 0; i < 9; i++) {
+        // Calcula as coordenadas do canto superior esquerdo de cada botao na grade
         int x = 345 + (i % 3) * 90;
         int y = 55 + (i / 3) * 55;
-
+        
+        // Desenha a moldura do botao
         rectangle(tela, Point(x, y),
                   Point(x + 55, y + 35),
                   Scalar(200, 200, 200), 1);
 
-        if (i == 4) {
-            // Botão central: alterna Manual/Automático
+        if (i == 4) { // botao central: alterna Manual/Automatico
             putText(tela, "M/A", Point(x + 7, y + 24),
                     FONT_HERSHEY_SIMPLEX, 0.6,
                     Scalar(0, 0, 255), 2);
-        } else {
+        } else { // demais botoes: seta
             desenharSeta(tela, x, y, dx[i], dy[i]);
         }
     }
 }
 
+// Traduz a tecla do controle manual em velocidade PWM
 void traduzirComando(int comando, BYTE& v_esq, BYTE& v_dir, BYTE& r_esq, BYTE& r_dir) {
-    // Traduz as teclas do controle manual (0 a 9) para velocidades PWM de 0 a 255
-    // v_* = velocidade para a frente, r_* = velocidade para trás (ré)
+    // v_* = velocidade para a frente   /   r_* = velocidade para tras (re)
     v_esq = 0; v_dir = 0; r_esq = 0; r_dir = 0;
     switch (comando) {
         case 8: v_esq = 200; v_dir = 200; break; // Frente
@@ -129,9 +135,9 @@ void traduzirComando(int comando, BYTE& v_esq, BYTE& v_dir, BYTE& r_esq, BYTE& r
         case 6: v_esq = 0; v_dir = 200; break;   // Direita
         case 7: v_esq = 200; v_dir = 100; break; // Frente-Esquerda
         case 9: v_esq = 100; v_dir = 200; break; // Frente-Direita
-        case 2: r_esq = 200; r_dir = 200; break; // Ré
-        case 1: r_esq = 200; r_dir = 100; break; // Ré-Esquerda
-        case 3: r_esq = 100; r_dir = 200; break; // Ré-Direita
+        case 2: r_esq = 200; r_dir = 200; break; // Re
+        case 1: r_esq = 200; r_dir = 100; break; // Re-Esquerda
+        case 3: r_esq = 100; r_dir = 200; break; // Re-Direita
         default: break;                          // Parado
     }
 }
@@ -141,19 +147,19 @@ void traduzirComando(int comando, BYTE& v_esq, BYTE& v_dir, BYTE& r_esq, BYTE& r
    =================== FUNCOES - MODO AUTOMATICO ===================
    ================================================================= */ 
 
-// 2. PREPARA 10 ESCALAS DA PLACA
+// Prepara as 10 escalas da placa
 vector<EscalaModelo> prepararModelos(const string& nome_arquivo) {
     // Converte a matriz colorida da placa em um float
-    Mat_<COR> temp_COR = imread(nome_arquivo, 1); 
+    Mat_<COR> temp_COR = imread(nome_arquivo, 1); // le a imagem em padrao BGR e armazena na matriz
     if (temp_COR.total() == 0) erro("Erro: molde nao encontrado!"); 
     Mat_<FLT> T_original;
-    converte(temp_COR, T_original);
+    converte(temp_COR, T_original); // converte a imagem colorida (0 a 255) em tons de cinza (0.0 a 1.0). Evita overflow e permite netagivos
     
     vector<EscalaModelo> modelos(10); // prepara um vetor p/ guardar as 10 escalas
-    float fator = 0.30;  
-    float decrecimo = pow(0.095 / 0.30, 1.0/9.0); 
+    float fator = 0.30;  //// fator de reducao inicial (maior molde tem 30% do arquivo)
+    float decrecimo = pow(0.095 / 0.30, 1.0/9.0); // redu em PG
     
-    // Redimensiona a imagem, remove cinza médio (rejeição DC) e salva a versão otimizada
+    // Constroi os moldes: redimensiona a imagem, remove cinza medio (rejeicao DC) e salva a versao otimizada
     for(int s = 0; s < 10; s++) {
         Mat_<FLT> T_redim;
         resize(T_original, T_redim, Size(), fator, fator, INTER_NEAREST);
@@ -168,19 +174,19 @@ vector<EscalaModelo> prepararModelos(const string& nome_arquivo) {
     return modelos;
 }
 
-// Encontrar os picos de detecção no mapa do OpenCV
+// Encontrar os picos de deteccao no mapa do OpenCV
 vector<Point> acharPicos(const Mat_<FLT>& mapa, int limite, int dist) {
     vector<Point> picos; // vetor de coordenadas
-    Mat_<FLT> work_map = mapa.clone(); // para poder apagar os picos da cópia ao encontrar 
+    Mat_<FLT> work_map = mapa.clone(); // para poder apagar os picos da copia ao encontrar 
     
-    // Loop até acabar ou atingir o limite de picos
+    // Loop ate acabar ou atingir o limite de picos
     for(int i = 0; i < limite; i++) {
         double maxVal; Point maxLoc;  // pontuação e coordenadas do pico 
-        minMaxLoc(work_map, NULL, &maxVal, NULL, &maxLoc); // varre a matriz encontrando máximo (não quero mínimo -> null)
-        if (maxVal <= 0.0) break; // se não tem mais picos, interrompe o loop
+        minMaxLoc(work_map, NULL, &maxVal, NULL, &maxLoc); // varre a matriz encontrando maximo (nao quero minimos -> null)
+        if (maxVal <= 0.0) break; // se nao tem mais picos, interrompe o loop
         picos.push_back(maxLoc);
 
-        // Apaga o pico já encontrado (cria um quadrado preto em volta)
+        // Apaga o pico ja encontrado (cria um quadrado preto em volta)
         int startX = max(0, maxLoc.x - dist);
         int startY = max(0, maxLoc.y - dist);
         int endX = min(work_map.cols - 1, maxLoc.x + dist);
@@ -192,9 +198,10 @@ vector<Point> acharPicos(const Mat_<FLT>& mapa, int limite, int dist) {
     return picos;
 }
 
+// Localiza a placa na imagem (CC para achar candidatos rapido e NCC para confirmar)
 void procurarPlaca(const Mat_<FLT>& frame_FLT, const vector<EscalaModelo>& modelos, float& melhor_ncc, int& melhor_escala, Point& melhor_pt) {
-    vector<Mat_<FLT>> R_cc(10);   // Cross-Correlation - armazena os mapas da busca preliminar
-    vector<Mat_<FLT>> R_ncc(10);  // Normalized Cross-Correlation - mapas da busca refinada
+    vector<Mat_<FLT>> R_cc(10);   // cross-Correlation - armazena os mapas da busca preliminar
+    vector<Mat_<FLT>> R_ncc(10);  // normalized cross-correlation - mapas da busca refinada
     
     melhor_ncc = 0; melhor_escala = -1; melhor_pt = Point(0,0);
     
@@ -204,7 +211,7 @@ void procurarPlaca(const Mat_<FLT>& frame_FLT, const vector<EscalaModelo>& model
         R_ncc[s] = matchTemplateSame(frame_FLT, modelos[s].T_raw, TM_CCOEFF_NORMED, 0.0); // busca refinada, compara o frame com o modelo cru e gera um segundo mapa
     }
     
-    // segundo loop, sem paralelismo, para evitar condição de corrida
+    // Segundo loop, sem paralelismo, para evitar condição de corrida
     for (int s = 0; s < 10; s++) { 
         vector<Point> picos = acharPicos(R_cc[s], 2, 10); // devolve os dois melhores picos do Rcc
         for(Point p : picos) { // analisa os 2 picos
@@ -217,27 +224,28 @@ void procurarPlaca(const Mat_<FLT>& frame_FLT, const vector<EscalaModelo>& model
     }
 }
 
+// Aplica KNN para classificar os digitos manuscritos na placa
 int lerDigito(const Mat_<COR>& frame_COR, const EscalaModelo& modelo, Point pt, MNIST& mnist, flann::Index& flann_index) {
     // Encontra o centro aproximado da placa
     int bw = modelo.cols / 2;
     int bh = modelo.rows / 2;
     
-    // Margem de segurança - Capturar o dígito sem cortar nem aparecer a borda preta
+    // Margem de segurança - Capturar o digito sem cortar nem aparecer a borda preta
     int margem_x = bw * 0.12; 
     int margem_y = bh * 0.12;
-    Rect regiao_digito(pt.x - bw/2 + margem_x, pt.y - bh/2 + margem_y, bw - 2*margem_x, bh - 2*margem_y); // retângulo para recorte
-    regiao_digito &= Rect(0, 0, frame_COR.cols, frame_COR.rows); // se tentar cortar fora da câmera, ajusta
+    Rect regiao_digito(pt.x - bw/2 + margem_x, pt.y - bh/2 + margem_y, bw - 2*margem_x, bh - 2*margem_y); // retangulo para recorte
+    regiao_digito &= Rect(0, 0, frame_COR.cols, frame_COR.rows); // se tentar cortar fora da camera, ajusta
     
     if (regiao_digito.area() > 0) {
-        // Converte o miolo da placa para tons de cinza (MNIST não entende cores) 
+        // Converte o miolo da placa para tons de cinza (MNIST nao entende cores) 
         Mat_<GRY> img_digito;
         cvtColor(frame_COR(regiao_digito), img_digito, COLOR_BGR2GRAY);
         threshold(img_digito, img_digito, 0, 255, THRESH_BINARY | THRESH_OTSU); // limiar de otsu --> encontra o melhor tom de cinza para separar a caneta do papel
         
-        Mat_<GRY> img_bbox = mnist.bbox(img_digito);  // função do cekeikon para forçar imagem em 14x14
+        Mat_<GRY> img_bbox = mnist.bbox(img_digito);  // funcao do cekeikon para forçar imagem em 14x14
         Mat_<FLT> digito_flt;
 
-        // Converte imagem 14x14 p/ uma única linha de 196 números decimais
+        // Converte imagem 14x14 p/ uma unica linha de 196 numeros decimais
         img_bbox.convertTo(digito_flt, CV_32F, 1.0/255.0, 0.0); 
         digito_flt = digito_flt.reshape(1, 1); 
         
@@ -247,7 +255,7 @@ int lerDigito(const Mat_<COR>& frame_COR, const EscalaModelo& modelo, Point pt, 
         Mat dists(1, k, CV_32F);
         flann_index.knnSearch(digito_flt, indices, dists, k, flann::SearchParams(32));
         
-        // Olha as 5 imagens mais parecidas e decide qual o dígito por "votação" 
+        // Olha as 5 imagens mais parecidas e decide qual o digito por "votacao" 
         vector<int> votos(10, 0);
         for(int i = 0; i < k; i++) votos[ mnist.AY[indices.at<int>(0, i)] ]++;
         return distance(votos.begin(), max_element(votos.begin(), votos.end()));
@@ -255,8 +263,9 @@ int lerDigito(const Mat_<COR>& frame_COR, const EscalaModelo& modelo, Point pt, 
     return -1;
 }
 
+// Desenha na camera o resultado final do rastreamento da placa e reconhecimento do digito
 void desenharDebugVisao(Mat_<COR>& frame_COR, int estado, int digito, float ncc, int escala, Point pt, const vector<EscalaModelo>& modelos) {
-    // DESENHAR INFORMAÇÃO NA TELA
+    // Desenha condorno da placa caso a confianca passe do limiar de confianca (50%)
     if (escala != -1 && ncc > 0.50) {
         int bw = modelos[escala].cols / 2;
         int bh = modelos[escala].rows / 2;
@@ -264,7 +273,7 @@ void desenharDebugVisao(Mat_<COR>& frame_COR, int estado, int digito, float ncc,
                              Point(pt.x + bw, pt.y + bh), Scalar(0, 255, 255), 2);
     }
 
-    // Carimba texto de debug no topo da imagem da câmera
+    // Carimba texto de debug no topo da imagem da camera
     char txt_status[100];
     sprintf(txt_status, "Estado: %d | Digito: %d", estado, digito);
     putText(frame_COR, txt_status, Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0, 0, 255), 2);
