@@ -256,9 +256,9 @@ int lerDigito(const Mat_<COR>& frame_COR, const EscalaModelo& modelo, Point pt, 
         flann_index.knnSearch(digito_flt, indices, dists, k, flann::SearchParams(32));
         
         // Olha as 5 imagens mais parecidas e decide qual o digito por "votacao" 
-        vector<int> votos(10, 0);
-        for(int i = 0; i < k; i++) votos[ mnist.AY[indices.at<int>(0, i)] ]++;
-        return distance(votos.begin(), max_element(votos.begin(), votos.end()));
+        vector<int> votos(10, 0); // cria uma "urna" com 10 posicoes (digitos de 0 a 9)
+        for(int i = 0; i < k; i++) votos[ mnist.AY[indices.at<int>(0, i)] ]++; // distribui os votos
+        return distance(votos.begin(), max_element(votos.begin(), votos.end())); // retorna o indice da posicao mais voatada
     }
     return -1;
 }
@@ -288,7 +288,7 @@ void desenharDebugVisao(Mat_<COR>& frame_COR, int estado, int digito, float ncc,
    ================================================================= */ 
 
 int main(int argc, char** argv) {
-    // Verifica se o comando no terminal está completo
+    // Verifica se o comando no terminal esta completo
     if (argc < 3) erro("Uso: cliente7_final <IP_Raspberry> <videosaida.avi> [t/c]");
 
     // Instancia o cliente e tenta conectar na raspberry
@@ -296,24 +296,26 @@ int main(int argc, char** argv) {
 
     // 1. CARREGAR MNIST E TREINAR IA
     cout << "Carregando modelo MNIST..." << endl;
-    MNIST mnist(14, true, true);
-    mnist.le("./");  // lê os arquivos de treinamento
-    flann::Index flann_index(mnist.ax, flann::KDTreeIndexParams(4)); // organiza os exemplos em uma árvore de busca rápida
+    MNIST mnist(14, true, true); // inicializa mnist, imagem 14x14 com inversao de cores e recorte automatico bounding box
+    mnist.le("./");  // le os arquivos de treinamento
+    flann::Index flann_index(mnist.ax, flann::KDTreeIndexParams(4)); // 4 arvores de busca paralelas
 
+    // Pre calcula 10 escalas em PG a partir do molde da placa
     vector<EscalaModelo> modelos = prepararModelos("quadrado.png");
 
-    // 3. CONFIGURAR GRAVAÇÃO E INTERFACE
-    // Abre o arquivo de vídeo (Modo C = 320x240, Modo T = 640x240 com teclado)
-    bool mostrar_tela = (argc >= 4 && argv[3][0] == 't'); // se tem t no comando, abre a janela gráfica larga
+    // 2. CONFIGURAR GRAVACAO E INTERFACE
+    // Abre o arquivo de video (Modo C = 320x240, Modo T = 640x240 com teclado)
+    bool mostrar_tela = (argc >= 4 && argv[3][0] == 't'); // se tem t no comando, abre a janela grafica larga
     Size tamanho_video = mostrar_tela ? Size(640, 240) : Size(320, 240);
     VideoWriter vo(argv[2], VideoWriter::fourcc('X','V','I','D'), 20, tamanho_video);
     
+    // Cria janela grafica com callback para capturar eventos do mouse
     if (mostrar_tela) {
         namedWindow("Cliente Misto");
         setMouseCallback("Cliente Misto", cliqueMouse);
     }
 
-    // Prepara as memórias da FSM (estado atual, cronômetro, último dígito encontrado)
+    // 3. PREPARA MEMORIAS DA FSM (estado atual, cronometro, ultimo digito encontrado)
     int estado = 0; 
     double t_estado = timeSinceEpoch();
     int digito_memoria = -1;
@@ -321,53 +323,53 @@ int main(int argc, char** argv) {
     
     // 4. LOOP PRINCIPAL
     while (true) {
-        // Recebe tamanho da imagem
+        // Recebe o tamanho da imagem
         int tam;
         client.receiveBytes(4, (BYTE*)&tam);
-        if (tam <= 0) break; // se vier zero, a conexão caiu --> quebra o loop
+        if (tam <= 0) break; // se vier zero, a conexao caiu --> quebra o loop
         
-        vector<BYTE> buffer(tam);                   // cria espaço na memória para a imagem
+        vector<BYTE> buffer(tam);                   // cria espaço na memoria para a imagem
         client.receiveBytes(tam, buffer.data());    // recebe a imagem do servidor
         Mat_<COR> frame_COR = imdecode(buffer, 1);  // descompacta os bytes recebidos
         if (frame_COR.empty()) break;
 
         Mat_<FLT> frame_FLT;
-        float melhor_ncc = 0;    // melhor nível de confiança (NCC) 
+        float melhor_ncc = 0;    // melhor nivel de confiança (NCC) 
         int melhor_escala = -1;  // guarda o tamanho com maior nota (escala de 0 a 9)
         Point melhor_pt(0,0);    // posição da placa de maior clareza
 
-        if (modo_automatico && !auto_anterior) { // acabou de ligar o automatico
+        if (modo_automatico && !auto_anterior) { // apenas ao ligar o automatico
             estado = 0;                          // sai do estado 4 (manual) e volta a procurar a placa
-            t_estado = timeSinceEpoch();
+            t_estado = timeSinceEpoch();         // zera o cronometro 
         }
-        auto_anterior = modo_automatico;
+        auto_anterior = modo_automatico;         // garante que o if so eh executado na borda de subida
 
-        // Só executa o peso da visão computacional se estiver no modo automático e precisando procurar a placa
+        // Executa a visao computacional apenas no modo automatico e precisando procurar a placa
         if (modo_automatico && (estado == 0 || estado == 2)) {
             converte(frame_COR, frame_FLT); // pega a foto colorida (0 a 255) da rede e converte para float
             procurarPlaca(frame_FLT, modelos, melhor_ncc, melhor_escala, melhor_pt);
         }
 
-        BYTE v_esq = 0, v_dir = 0;
-        BYTE r_esq = 0, r_dir = 0; // velocidades de ré (so usadas no modo manual)
+        BYTE v_esq = 0, v_dir = 0;  // se nenhuma condicao ativar o carrinho, ele para
+        BYTE r_esq = 0, r_dir = 0;  // velocidades de re (somente no manual)
         double decorrido = timeSinceEpoch() - t_estado;
 
-        // --- DIVISOR DE ÁGUAS: MODO MANUAL VS MODO AUTOMÁTICO ---
-        if (!modo_automatico) {
-            estado = 4; // Força o estado 4 (Manual) para a interface saber onde estamos
-            traduzirComando(comandoMouse, v_esq, v_dir, r_esq, r_dir);
+        // ------- MODO MANUAL VS MODO AUTOMATICO -------
+        if (!modo_automatico) { // MODO MANUAL
+            estado = 4; // desativar modo auto forca a entrar no estado 4 (manual)
+            traduzirComando(comandoMouse, v_esq, v_dir, r_esq, r_dir); // passa a ler comandos do mouse
         } 
         else {
-            // LÓGICA DA MÁQUINA DE ESTADOS FINITA (AUTOMÁTICA)
+            // MAQUINA DE ESTADOS FINITA (MODO AUTOMATICO)
             switch(estado) {
                 case 0: // procurar e seguir
-                    if (melhor_escala != -1 && melhor_ncc > 0.50) { // limiar de tolerância = 0.5
+                    if (melhor_escala != -1 && melhor_ncc > 0.50) { // limiar de tolerancia = 0.5
                         if (melhor_escala <= 2) { // verifica se a placa tem um tamanho bom
                             estado = 1;
-                            t_estado = timeSinceEpoch(); // zera o cronômetro
-                        } else { // se não tiver, se aproxima da placa
+                            t_estado = timeSinceEpoch(); // zera o cronometro
+                        } else { // se nao tiver, se aproxima da placa
                             // mini sistema de controle para ajustar rota
-                            int erro_x = melhor_pt.x - 160; // vê o erro de rota (quão longe do centro = 160)
+                            int erro_x = melhor_pt.x - 160; // ve o erro de rota (quao longe do centro = 160)
                             int base = 100; // velocidade
                             float K = 0.35;  // constante proporcional
 
@@ -375,14 +377,14 @@ int main(int argc, char** argv) {
                             int calc_esq = base - (K * erro_x);
                             int calc_dir = base + (K * erro_x);
 
-                            // trava de segurança: mantém na escala 0 a 255
+                            // trava de seguranca: mantem sempre na escala 0 a 255
                             v_esq = (calc_esq > 255) ? 255 : (calc_esq < 0 ? 0 : calc_esq);
                             v_dir = (calc_dir > 255) ? 255 : (calc_dir < 0 ? 0 : calc_dir);
                         }
                     }
                     break;
 
-                case 1: // travar (esperar inércia)
+                case 1: // travar (esperar inercia)
                     v_esq = 0; v_dir = 0;
                     if (decorrido > 1.0) { // 1 segundo parado
                         estado = 2;
@@ -390,30 +392,30 @@ int main(int argc, char** argv) {
                     }
                     break;
 
-                case 2: // ler dígito da placa
-                    v_esq = 0; v_dir = 0; // para os motores enquanto a foto é processada
+                case 2: // ler digito da placa
+                    v_esq = 0; v_dir = 0; // para os motores enquanto a foto eh processada
 
                     if (melhor_escala != -1 && melhor_escala <= 2 && melhor_ncc > 0.50) { // confirma escala e qualidade antes de ler
                         digito_memoria = lerDigito(frame_COR, modelos[melhor_escala], melhor_pt, mnist, flann_index);
                         
-                        // Decidir transição de estado de acordo com o dígito vencedor
-                        if (digito_memoria == 0 || digito_memoria == 1) {
-                            modo_automatico = false; // FIM DA PISTA: Volta para o modo manual
+                        // Decidir transicao de estado de acordo com o digito vencedor
+                        if (digito_memoria == 0 || digito_memoria == 1) { // FIM: volta para o manual
+                            modo_automatico = false; 
                             estado = 4; 
-                            comandoMouse = 5; // Garante que volta parado
+                            comandoMouse = 5; // garante que volta parado
                         } else if (digito_memoria != -1) {
                             estado = 3; // executar manobra
                             t_estado = timeSinceEpoch();
-                        } else if (decorrido > 0.5) {
-                            estado = 0; // nao conseguiu ler o digito, volta a procurar
+                        } else if (decorrido > 0.5) { // perdeu o digito por mais de 0.5s, volta a procurar
+                            estado = 0;
                         }
-                    } else if (decorrido > 0.5) {
-                        estado = 0; // se não conseguir ler, volta a procurar
+                    } else if (decorrido > 0.5) { // nao conseguiu qualidade boa o bastante para seguir, volta a procurar
+                        estado = 0; 
                     }
                     break;
 
-                case 3: // manobras cegas
-                    if (digito_memoria == 6 || digito_memoria == 7) { // 90 esq - CALIBRAR
+                case 3: // manobras automaticas
+                    if (digito_memoria == 6 || digito_memoria == 7) { // 90 esq
                         v_esq = 200; v_dir = 0;
                         if (decorrido > 1.0) estado = 5; 
                     } 
@@ -421,7 +423,7 @@ int main(int argc, char** argv) {
                         v_esq = 0; v_dir = 200;
                         if (decorrido > 1.2) estado = 5; 
                     } 
-                    else if (digito_memoria == 2) { // 180 esq - CALIBRAR
+                    else if (digito_memoria == 2) { // 180 esq
                         v_esq = 200; v_dir = 0;
                         if (decorrido > 2.0) estado = 5; 
                     } 
@@ -433,51 +435,50 @@ int main(int argc, char** argv) {
                         v_esq = 180; v_dir = 180;
                         if (decorrido > 1.2) estado = 5;
                     }
-                    if (estado == 5) t_estado = timeSinceEpoch(); // ao trocar de estado, reseta o cronômetro
+                    if (estado == 5) t_estado = timeSinceEpoch(); // ao trocar de estado, reseta o cronometro
                     break;
 
-                case 5: // recuperação (esperar inércia e recomeçar)
+                case 5: // recuperacao (espera inercia e reseta)
                     v_esq = 0; v_dir = 0;
                     if (decorrido > 0.5) estado = 0; 
                     break;
             }
-        } // Fim IF Automático
+        } // Fim do modo automatico
 
-        // ENVIAR COMANDOS PELA REDE (Igual para os dois modos)
+        // 5. ENVIAR COMANDOS PELA REDE
         BYTE cmd[4] = {v_esq, v_dir, r_esq, r_dir};
         cout << "auto=" << modo_automatico << " estado=" << estado
              << " cmd=" << (int)v_esq << "," << (int)v_dir
              << " re=" << (int)r_esq << "," << (int)r_dir << endl; // depuracao
         client.sendBytes(4, cmd);
         
-        // --- MONTAR A INTERFACE E GRAVAR VÍDEO ---
-        if (mostrar_tela) {
-            Mat_<COR> tela(240, 640, COR(0, 0, 0));
+        // 6. MONTAR A INTERFACE E GRAVAR VIDEO
+        if (mostrar_tela) { // verifica se esta no modo t
+            Mat_<COR> tela(240, 640, COR(0, 0, 0)); // cria uma "tela em branco" para o video e teclado
             
-            if (modo_automatico) {
+            if (modo_automatico) { // se no modo auto, adiciona os debugs na tela
                 desenharDebugVisao(frame_COR, estado, digito_memoria, melhor_ncc, melhor_escala, melhor_pt, modelos);
             }
             
-            // Copia a câmera para a metade esquerda
+            // Copia a camera para a metade esquerda
             frame_COR.copyTo(tela(Rect(0, 0, 320, 240)));
             
-            // Desenha o teclado na metade direita
+            // Desenhar o teclado na metade direita
             desenharTeclado(tela);
             
             imshow("Cliente Misto", tela);
             vo << tela; // Grava a tela larga completa
-        } else {
-            // Se estiver rodando no modo 'c', grava apenas a câmera pura
+        } else { // Se estiver rodando no modo 'c', grava apenas a camera pura
             if (modo_automatico) {
                 desenharDebugVisao(frame_COR, estado, digito_memoria, melhor_ncc, melhor_escala, melhor_pt, modelos);
             }
             vo << frame_COR;
         }
         
-        // ESC --> Sai à força e encerra
+        // ESC --> Sai a força e encerra
         if (waitKey(1) == 27) {
             cmd[0] = 0; cmd[1] = 0; cmd[2] = 0; cmd[3] = 0;
-            client.sendBytes(4, cmd); // Tenta parar o carrinho antes de fechar
+            client.sendBytes(4, cmd); // Para o carrinho antes de fechar
             break;
         }
     }
